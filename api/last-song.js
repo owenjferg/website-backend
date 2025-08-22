@@ -1,79 +1,78 @@
-module.exports = async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+export const config = { runtime: "edge" };
+
+export default async function handler(req) {
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "content-type": "application/json"
+  };
 
   if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
+    return new Response(null, { status: 200, headers });
   }
 
-  // Sanity checks for env vars
   const { CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN } = process.env;
   if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
-    return res.status(500).json({
+    return new Response(JSON.stringify({
       error: "Missing environment variables",
       expected: ["CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN"]
-    });
+    }), { status: 500, headers });
   }
 
   try {
-    // Refresh access token
-    const basicAuth = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+    const basicAuth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+
+    //Refresh access token
     const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${basicAuth}`,
+        "Authorization": `Basic ${basicAuth}`
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: REFRESH_TOKEN,
-      }),
+        refresh_token: REFRESH_TOKEN
+      })
     });
 
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok || !tokenData.access_token) {
-      return res.status(500).json({
+      return new Response(JSON.stringify({
         error: "Failed to refresh token",
         details: tokenData
-      });
+      }), { status: 500, headers });
     }
 
-    //Get last played track
+    //Get last played
     const songRes = await fetch(
       "https://api.spotify.com/v1/me/player/recently-played?limit=1",
       { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
     );
     const songData = await songRes.json();
-
     if (!songRes.ok) {
-      return res.status(500).json({
+      return new Response(JSON.stringify({
         error: "Failed to fetch recently played",
         details: songData
-      });
+      }), { status: 500, headers });
     }
 
-    const item = songData.items && songData.items[0];
-    const track = item && item.track;
+    const item = songData.items?.[0];
+    const track = item?.track;
 
-    // Return for frontend
-    return res.status(200).json({
-      name: track?.name || null,
-      artists: (track?.artists || []).map(a => a.name),
-      url: track?.external_urls?.spotify || null,
-      played_at: item?.played_at || null,
+    return new Response(JSON.stringify({
+      name: track?.name ?? null,
+      artists: (track?.artists ?? []).map(a => a.name),
+      url: track?.external_urls?.spotify ?? null,
+      played_at: item?.played_at ?? null,
       album: {
-        name: track?.album?.name || null,
-        image: track?.album?.images?.[0]?.url || null
-      },
-      //debugging
-      raw: songData
-    });
+        name: track?.album?.name ?? null,
+        image: track?.album?.images?.[0]?.url ?? null
+      }
+    }), { status: 200, headers });
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error", details: String(err) });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "Server error", details: String(e) }), { status: 500, headers });
   }
-};
+}
 
