@@ -2,7 +2,7 @@ export const config = { runtime: "edge" };
 
 export default async function handler(req) {
   const headers = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://owenjferg.nekoweb.org/",
     "Access-Control-Allow-Methods": "GET,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "content-type": "application/json"
